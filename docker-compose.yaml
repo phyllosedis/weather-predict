@@ -1,0 +1,53 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: weather-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  chunk-handler:
+    build:
+      context: ./chunk-handler
+    deploy:
+      replicas: 5
+    environment:
+      - RABBIT_HOST=rabbitmq
+      - RABBIT_PORT=5672
+      - RABBIT_USER=guest
+      - RABBIT_PASS=guest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    container_name: weather-orchestrator
+    ports:
+      - "9080:9080"
+    environment:
+      - RABBIT_HOST=rabbitmq
+    volumes:
+      - ./data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  predictor:
+    build:
+      context: ./predictor
+    container_name: weather-predictor
+    environment:
+      - RABBIT_HOST=rabbitmq
+    volumes:
+      - ./data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
